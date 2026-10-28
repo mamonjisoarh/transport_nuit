@@ -1,0 +1,348 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #0f172a 0%, #1d4ed8 45%, #7c3aed 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.app-shell {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+}
+
+.container {
+    width: min(480px, 100%);
+    background: rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 28px;
+    padding: 24px;
+    box-shadow: 0 25px 80px rgba(15, 23, 42, 0.45);
+}
+
+.header {
+    text-align: center;
+    margin-bottom: 18px;
+}
+
+.badge {
+    display: inline-block;
+    background: rgba(255,255,255,0.15);
+    color: #e2e8f0;
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 999px;
+    padding: 7px 12px;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+}
+
+.header h1 {
+    color: white;
+    font-size: clamp(1.6rem, 4vw, 2.1rem);
+}
+
+.mode-panel {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0,1fr));
+    gap: 10px;
+    margin-bottom: 18px;
+}
+
+.mode-btn {
+    border: 1px solid rgba(255,255,255,0.18);
+    background: rgba(148, 163, 184, 0.12);
+    color: white;
+    border-radius: 14px;
+    padding: 14px 18px;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.mode-btn.active {
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    border-color: transparent;
+    box-shadow: 0 12px 24px rgba(34, 197, 94, 0.35);
+}
+
+.mode-btn:hover {
+    transform: translateY(-1px);
+}
+
+/* ============================================
+   ZONE SCANNER — vidéo pure, sans dashboard de librairie
+   ============================================ */
+.scan-wrap {
+    margin-bottom: 14px;
+}
+
+#reader {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    background: #000;
+    border-radius: 18px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.14);
+    position: relative;
+}
+
+#reader video {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover;
+    display: block;
+}
+
+/* html5-qrcode dessine un cadre de visée par-dessus la vidéo : on le garde discret */
+#reader > div {
+    border: none !important;
+}
+
+.scan-tools {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.btn-icon.btn-icon--stop {
+    background: rgba(239, 68, 68, 0.16);
+    border-color: rgba(239,68,68,0.4);
+    color: #fecaca;
+}
+
+.btn-icon {
+    background: rgba(255,255,255,0.12);
+    color: white;
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: filter 0.15s ease;
+    white-space: nowrap;
+}
+
+.btn-icon:hover {
+    filter: brightness(1.1);
+}
+
+.scan-status {
+    color: rgba(255,255,255,0.7);
+    font-size: 0.8rem;
+    text-align: right;
+    flex: 1 1 auto;
+    min-width: 100px;
+}
+
+.position-status {
+    color: rgba(255,255,255,0.55);
+    font-size: 0.74rem;
+    text-align: right;
+    margin-top: 4px;
+}
+
+/* ============================================
+   Message caméra indisponible / saisie manuelle
+   ============================================ */
+#permission-info {
+    background: rgba(251, 191, 36, 0.15);
+    border: 1px solid rgba(251, 191, 36, 0.4);
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+}
+
+#permission-info p {
+    color: #fef3c7;
+    margin: 0 0 10px;
+    font-size: 0.88rem;
+}
+
+.manual-input {
+    display: flex;
+    gap: 8px;
+}
+
+.manual-input input {
+    flex: 1;
+    min-width: 0;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.2);
+    background: rgba(15, 23, 42, 0.35);
+    color: white;
+    font-size: 0.95rem;
+}
+
+.manual-input input::placeholder {
+    color: rgba(255,255,255,0.5);
+}
+
+.manual-input input:focus {
+    outline: none;
+    border-color: rgba(251,191,36,0.9);
+    box-shadow: 0 0 0 3px rgba(251,191,36,0.2);
+}
+
+/* ============================================
+   Résultat du scan — doit apparaître instantanément et rester lisible
+   ============================================ */
+#result {
+    text-align: center;
+    min-height: 4px; /* évite un saut de mise en page brutal quand le contenu apparaît */
+}
+
+.result-card {
+    background: rgba(255,255,255,0.95);
+    border-radius: 18px;
+    padding: 18px 16px;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    box-shadow: 0 12px 25px rgba(15, 23, 42, 0.12);
+    animation: apparition 0.15s ease-out;
+}
+
+.result-card--error {
+    border-color: rgba(37, 99, 235, 0.28);
+    background: rgba(239, 246, 255, 0.96);
+}
+
+.result-card--error #result-title,
+.result-card--error .result-message {
+    color: #1e40af;
+}
+
+.result-message {
+    text-align: center;
+    padding: 10px;
+    font-weight: 600;
+    line-height: 1.45;
+}
+
+@keyframes apparition {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.result-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+#result-icon {
+    font-size: 36px;
+}
+
+#result-title {
+    font-size: 1.2rem;
+    letter-spacing: 0.01em;
+}
+
+#result-content .info-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(148,163,184,0.24);
+    color: #0f172a;
+    font-size: 0.96rem;
+}
+
+#result-content .info-item:last-child {
+    border-bottom: none;
+}
+
+.label {
+    font-weight: 600;
+    color: #334155;
+}
+
+.value {
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.btn {
+    display: block;
+    border: none;
+    border-radius: 12px;
+    padding: 13px 16px;
+    font-size: 0.98rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    width: 100%;
+    text-align: center;
+    margin-top: 10px;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    color: white;
+    box-shadow: 0 12px 20px rgba(34, 197, 94, 0.28);
+}
+
+.footer {
+    text-align: center;
+    margin-top: 18px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    color: rgba(255,255,255,0.7);
+    font-size: 0.8rem;
+}
+
+.toast {
+    position: fixed;
+    bottom: 22px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(15, 23, 42, 0.92);
+    color: white;
+    padding: 12px 18px;
+    border-radius: 999px;
+    font-size: 0.9rem;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.35);
+    z-index: 1000;
+    max-width: 90vw;
+    text-align: center;
+}
+
+.toast-success {
+    background: rgba(22, 163, 74, 0.96);
+}
+
+.toast-error {
+    background: rgba(30, 64, 175, 0.96);
+}
+
+@media (max-width: 480px) {
+    .container {
+        padding: 18px 16px;
+    }
+
+    .manual-input {
+        flex-direction: column;
+    }
+}

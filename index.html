@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>Pointage QR</title>
+  <script>
+    window.API_URL = window.API_URL || 'https://script.google.com/macros/s/AKfycbzCtg0KxF8EE7HrPtt_WKJztYAcKtpzhXlAsTBHsBxFyiZWd7Om1o5kX5HfSv8ccDlK/exec';
+  </script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <div class="container">
+
+      <div class="header">
+        <div class="badge">Secure Attendance</div>
+        <h1>Pointage employé</h1>
+      </div>
+
+      <div class="mode-panel">
+        <button class="mode-btn active" data-mode="entree" type="button">Entrée</button>
+        <button class="mode-btn" data-mode="sortie" type="button">Sortie</button>
+      </div>
+
+      <div class="scan-wrap">
+        <div id="reader"></div>
+        <div class="scan-tools">
+          <button class="btn-icon" id="btn-toggle-scan" type="button">⏹ Arrêter le scan</button>
+          <button class="btn-icon" id="btn-switch-camera" type="button" hidden>🔄 Changer de caméra</button>
+          <span class="scan-status" id="scan-status">Initialisation de la caméra…</span>
+        </div>
+        <div class="position-status" id="position-status">📍 Position : —</div>
+      </div>
+
+      <div id="permission-info" hidden>
+        <p>🔒 <strong>Caméra indisponible ou refusée.</strong><br>Utilisez le champ ci-dessous pour saisir le matricule :</p>
+        <form id="manual-form" class="manual-input">
+          <input type="text" id="manual-matricule" placeholder="Matricule" autocomplete="off">
+          <button type="submit" class="btn btn-success" style="margin-top:0;">Valider</button>
+        </form>
+      </div>
+
+      <div id="result"></div>
+
+      <div class="footer">
+        <p>Version 3.0 • Système de pointage par QR</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
