@@ -1,85 +1,106 @@
-// Frontend pour API Apps Script uniquement (fetch, pas de google.script.run).
-;(function () {
-    var html5QrCode = null;
-    var currentFacingMode = 'environment'; // caméra arrière par défaut
-    var isBusy = false; // vrai pendant le traitement d'un scan (évite les doublons)
-    var isRunning = false; // vrai tant que la caméra scanne activement
-    var selectedMode = 'entree';
-    var API_URL = (typeof window !== 'undefined' && window.API_URL) || 'https://script.google.com/macros/s/AKfycbyOxdO-lFIda9y6fVTpan5ZPvPPaTgLmLPwkmwzK1Y2F_ex-cvMlVSYGPBtjY5Of8KK/exec';
-    var config = { fps: 12, qrbox: { width: 250, height: 250 } };
+// Frontend Pointage QR — v3.6 (un seul bouton : le scan enregistre)
+// L'URL de l'API est définie ICI uniquement.
+(function () {
+    'use strict';
 
-    function setMode(mode) {
-        selectedMode = (mode === 'sortie') ? 'sortie' : 'entree';
-        var buttons = document.querySelectorAll('.mode-btn');
-        buttons.forEach(function (btn) {
-            btn.classList.toggle('active', btn.getAttribute('data-mode') === selectedMode);
+    var API_URL = 'https://script.google.com/macros/s/AKfycbwbffmEBMxUeGdz0RMTZrlynpqccsCarLgJqRhmyyuJekw5w9v-hdReypgQpPYalmU/exec';
+
+    var REQUEST_TIMEOUT_MS = 12000;
+    var SCAN_COOLDOWN_MS = 5000;      // ignore le même QR revu par la caméra pendant 5 s
+    var KEEPALIVE_MS = 4 * 60 * 1000; // garde Apps Script "chaud"
+
+    var scanConfig = {
+        fps: 10,
+        qrbox: function (w, h) {
+            var s = Math.floor(Math.min(w, h) * 0.7);
+            return { width: s, height: s };
+        },
+        aspectRatio: 1,
+        disableFlip: true
+    };
+
+    var html5QrCode = null;
+    var currentFacingMode = 'environment';
+    var isRunning = false;
+    var starting = false;
+    var resumeAfterHidden = false;
+
+    var lastScans = {};
+
+    function $(id) { return document.getElementById(id); }
+
+    function esc(value) {
+        return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
         });
     }
 
-    function getModeLabel() {
-        return selectedMode === 'sortie' ? 'Sortie' : 'Entrée';
-    }
-
-    function updateStatus(text) {
-        var el = document.getElementById('scan-status');
+    function setStatus(text) {
+        var el = $('scan-status');
         if (el) el.textContent = text;
     }
 
     // ============================================
-    // Caméra — API bas niveau Html5Qrcode : démarrage direct, pas de
-    // panneau intermédiaire (permission/select/start) à manipuler.
+    // Caméra
     // ============================================
+    function creerScanner() {
+        var options = { verbose: false, experimentalFeatures: { useBarcodeDetector: true } }; // décodeur natif si disponible
+        if (typeof Html5QrcodeSupportedFormats !== 'undefined') {
+            options.formatsToSupport = [Html5QrcodeSupportedFormats.QR_CODE];
+        }
+        return new Html5Qrcode('reader', options);
+    }
+
     function demarrerScanner() {
+        if (starting || isRunning) return;
         if (typeof Html5Qrcode === 'undefined') {
-            document.getElementById('reader').innerHTML = '<div style="padding:20px;color:#ef4444;text-align:center;">Bibliothèque QR introuvable</div>';
-            afficherPanneCamera();
+            $('reader').innerHTML = '<div style="padding:20px;color:#ef4444;text-align:center;">Bibliothèque QR introuvable</div>';
+            $('permission-info').hidden = false;
             return;
         }
+        if (!html5QrCode) html5QrCode = creerScanner();
 
-        if (!html5QrCode) {
-            html5QrCode = new Html5Qrcode('reader', /* verbose= */ false);
-        }
-
-        updateStatus('Démarrage de la caméra…');
-        html5QrCode.start({ facingMode: currentFacingMode }, config, onScanSuccess, onScanError)
+        starting = true;
+        setStatus('Démarrage de la caméra…');
+        html5QrCode.start({ facingMode: currentFacingMode }, scanConfig, onScanSuccess, function () {})
             .then(function () {
+                starting = false;
                 isRunning = true;
-                updateStatus('Prêt — présentez un QR code');
-                document.getElementById('permission-info').hidden = true;
+                setStatus('Prêt — présentez un QR code');
+                $('permission-info').hidden = true;
                 detecterPlusieursCameras();
                 majBoutonToggle();
             })
             .catch(function (err) {
-                handleCameraError(err);
+                starting = false;
+                isRunning = false;
+                majBoutonToggle();
+                setStatus('Caméra indisponible');
+                $('permission-info').hidden = false;
+                console.debug('Erreur caméra:', err);
             });
     }
 
-    // ============================================
-    // Bouton Arrêter / Démarrer le scan — utile si l'interface semble bloquée
-    // ou si on veut couper la caméra sans quitter la page.
-    // ============================================
+    function arreterScanner() {
+        if (!html5QrCode || !isRunning) return Promise.resolve();
+        isRunning = false;
+        majBoutonToggle();
+        return html5QrCode.stop().catch(function () {});
+    }
+
     function majBoutonToggle() {
-        var btn = document.getElementById('btn-toggle-scan');
+        var btn = $('btn-toggle-scan');
         if (!btn) return;
-        if (isRunning) {
-            btn.textContent = '⏹ Arrêter le scan';
-            btn.classList.add('btn-icon--stop');
-        } else {
-            btn.textContent = '▶ Démarrer le scan';
-            btn.classList.remove('btn-icon--stop');
-        }
+        btn.textContent = isRunning ? '⏹ Arrêter le scan' : '▶ Démarrer le scan';
+        btn.classList.toggle('btn-icon--stop', isRunning);
     }
 
     function toggleScan() {
+        resumeAfterHidden = false;
         if (isRunning) {
-            isRunning = false;
-            updateStatus('Scanner arrêté');
-            majBoutonToggle();
-            if (html5QrCode) {
-                html5QrCode.stop().catch(function () {});
-            }
+            setStatus('Scanner arrêté');
+            arreterScanner();
         } else {
-            majBoutonToggle();
             demarrerScanner();
         }
     }
@@ -87,271 +108,144 @@
     function detecterPlusieursCameras() {
         if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
         navigator.mediaDevices.enumerateDevices().then(function (devices) {
-            var camCount = devices.filter(function (d) { return d.kind === 'videoinput'; }).length;
-            var btn = document.getElementById('btn-switch-camera');
-            if (btn) btn.hidden = camCount < 2;
+            var count = devices.filter(function (d) { return d.kind === 'videoinput'; }).length;
+            var btn = $('btn-switch-camera');
+            if (btn) btn.hidden = count < 2;
         }).catch(function () {});
     }
 
     function changerCamera() {
         if (!html5QrCode) return;
-        updateStatus('Changement de caméra…');
-        html5QrCode.stop().then(function () {
-            currentFacingMode = (currentFacingMode === 'environment') ? 'user' : 'environment';
-            demarrerScanner();
-        }).catch(function () {
+        setStatus('Changement de caméra…');
+        arreterScanner().then(function () {
             currentFacingMode = (currentFacingMode === 'environment') ? 'user' : 'environment';
             demarrerScanner();
         });
     }
 
-    function handleCameraError(err) {
-        var s = String((err && err.message) || err || '');
-        isRunning = false;
-        majBoutonToggle();
-        updateStatus('Caméra indisponible');
-        afficherPanneCamera();
-        console.debug('Erreur caméra:', s);
-    }
-
-    function afficherPanneCamera() {
-        var info = document.getElementById('permission-info');
-        if (info) info.hidden = false;
-    }
-
-    // Le QR est généré au format "| MATRICULE | NOM |" (pipe en tête et en fin).
-    // On découpe par "|", on retire les segments vides/espaces, et on garde le premier
-    // segment non vide restant — c'est le matricule, quel que soit le nombre de pipes.
-    function extraireMatricule(decodedText) {
-        var texte = (decodedText || '').toString();
-        var segments = texte.split('|')
+    // ============================================
+    // Scan : le QR est au format "| MATRICULE | NOM |"
+    // ============================================
+    function parseQr(text) {
+        var segments = String(text || '').split('|')
             .map(function (s) { return s.trim(); })
             .filter(function (s) { return s !== ''; });
-        return segments.length ? segments[0] : texte.trim();
+        return { matricule: segments[0] || '', nom: segments[1] || '' };
     }
 
     function onScanSuccess(decodedText) {
-        if (isBusy) return; // ignore les détections répétées pendant le traitement en cours
-        isBusy = true;
+        var parsed = parseQr(decodedText);
+        if (!parsed.matricule) return;
 
-        try { html5QrCode.pause(true); } catch (e) {}
-        updateStatus('Scan détecté…');
+        var now = Date.now();
+        var key = parsed.matricule;
+        if (lastScans[key] && now - lastScans[key] < SCAN_COOLDOWN_MS) return;
+        lastScans[key] = now;
 
-        var matricule = extraireMatricule(decodedText);
-        traiterMatricule(matricule, reprendreScanApresDelai);
-    }
-
-    function reprendreScanApresDelai() {
-        setTimeout(function () {
-            try {
-                html5QrCode.resume();
-                updateStatus('Prêt — présentez un QR code');
-            } catch (e) {}
-            isBusy = false;
-        }, 900); // juste assez pour lire le résultat, sans ralentir la file d'attente
-    }
-
-    function onScanError() {
-        // Erreurs de lecture image par image (aucun QR dans le cadre) : ignorées volontairement,
-        // la librairie les déclenche en continu tant qu'elle ne détecte rien — inutile de les traiter.
+        pointer(parsed.matricule, parsed.nom);
     }
 
     // ============================================
-    // Géolocalisation — on ne demande PLUS la position à chaque scan (ça pouvait
-    // prendre plusieurs secondes et ralentir toute la file d'attente). On la
-    // récupère une seule fois en tâche de fond avec watchPosition() et on
-    // réutilise la dernière valeur connue, lue instantanément à chaque scan.
+    // Réseau — GET simple (pas de preflight CORS)
     // ============================================
-    var positionActuelle = { longitude: '', latitude: '' };
-    var watchId = null;
-
-    function demarrerSuiviPosition() {
-        if (!navigator.geolocation) {
-            majStatutPosition('indisponible (navigateur)');
-            return;
-        }
-        if (window.isSecureContext === false) {
-            // La géolocalisation est bloquée par le navigateur hors HTTPS/localhost.
-            majStatutPosition('bloquée (site non HTTPS)');
-            return;
-        }
-        majStatutPosition('en attente…');
-        // Demande une première position immédiatement ; le suivi conserve ensuite
-        // la dernière position connue sans ralentir la vérification du QR.
-        navigator.geolocation.getCurrentPosition(
-            function (pos) {
-                positionActuelle = { longitude: pos.coords.longitude, latitude: pos.coords.latitude };
-                majStatutPosition('active');
-            },
-            function () {},
-            { enableHighAccuracy: false, maximumAge: 60000, timeout: 4000 }
-        );
-        watchId = navigator.geolocation.watchPosition(
-            function (pos) {
-                positionActuelle = { longitude: pos.coords.longitude, latitude: pos.coords.latitude };
-                majStatutPosition('active');
-            },
-            function (err) {
-                // refusé ou indisponible : on garde '' et on continue le pointage sans position
-                var raison = (err && err.code === 1) ? 'refusée par l\'utilisateur' : (err && err.code === 2) ? 'position indisponible' : 'délai dépassé';
-                majStatutPosition(raison);
-                console.debug('Erreur géolocalisation:', err);
-            },
-            { enableHighAccuracy: false, maximumAge: 60000, timeout: 15000 }
-        );
-    }
-
-    function majStatutPosition(texte) {
-        var el = document.getElementById('position-status');
-        if (el) el.textContent = '📍 Position : ' + texte;
-    }
-
-    // ============================================
-    // Le mode sélectionné détermine uniquement la colonne visée côté backend.
-    // Entrée -> Date/Heure d'entrée (bloqué si déjà fait aujourd'hui).
-    // Sortie -> Date/Heure de sortie, même sans entrée préalable.
-    // ============================================
-    function traiterMatricule(matricule, onDone) {
-        if (!matricule) {
-            afficherErreur('Veuillez saisir un matricule ou scanner un QR valide.');
-            if (onDone) onDone();
-            return;
-        }
-
-        document.getElementById('result').innerHTML =
-            '<div class="result-card"><div class="result-header"><span id="result-icon">⏳</span>' +
-            '<h2 id="result-title" style="color:#1d4ed8;">Vérification...</h2></div>' +
-            '<div style="color:#1d4ed8; font-weight:600; text-align:center;">Mode : ' + getModeLabel() + '</div></div>';
-
-        var action = selectedMode === 'entree' ? 'entree' : 'sortie';
-
-        callApi(action, matricule, positionActuelle, function (response) {
-            handleResult(response, getModeLabel().toLowerCase());
-            if (onDone) onDone();
-        }, function (error) {
-            afficherErreur('Erreur API: ' + (error && error.message ? error.message : 'Impossible de contacter le backend'));
-            if (onDone) onDone();
+    function appeler(params, timeoutMs) {
+        var parts = [];
+        Object.keys(params).forEach(function (k) {
+            var v = params[k];
+            if (v !== '' && v !== null && v !== undefined) parts.push(encodeURIComponent(k) + '=' + encodeURIComponent(v));
         });
-    }
-
-    function callApi(action, matricule, position, onSuccess, onError) {
-        if (!API_URL) {
-            if (onError) onError({ message: 'Configurez window.API_URL dans index.html.' });
-            return;
-        }
-        var url = API_URL + '?action=' + encodeURIComponent(action) + '&matricule=' + encodeURIComponent(matricule);
-        if (position && position.longitude !== '' && position.latitude !== '') {
-            url += '&longitude=' + encodeURIComponent(position.longitude) + '&latitude=' + encodeURIComponent(position.latitude);
-        }
-
-        // Coupe-circuit : si le réseau/Apps Script met trop de temps à répondre, on
-        // affiche un message clair au lieu de laisser "Vérification..." indéfiniment.
-        // Note : le pointage peut malgré tout avoir été enregistré côté serveur avant
-        // l'expiration de ce délai — seule la réponse au navigateur a été trop lente.
         var controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-        var delaiDepasse = false;
-        var timer = controller ? setTimeout(function () {
-            delaiDepasse = true;
-            controller.abort();
-        }, 7000) : null;
-
-        fetch(url, { method: 'GET', headers: { Accept: 'application/json' }, signal: controller ? controller.signal : undefined })
+        var timer = controller ? setTimeout(function () { controller.abort(); }, timeoutMs) : null;
+        return fetch(API_URL + '?' + parts.join('&'), { method: 'GET', signal: controller ? controller.signal : undefined })
             .then(function (response) {
                 if (timer) clearTimeout(timer);
                 if (!response.ok) throw new Error('HTTP ' + response.status);
                 return response.json();
-            })
-            .then(function (data) { if (onSuccess) onSuccess(data || {}); })
-            .catch(function (error) {
+            }, function (err) {
                 if (timer) clearTimeout(timer);
-                if (delaiDepasse) {
-                    if (onError) onError({ message: 'Le serveur met trop de temps à répondre. Le pointage a peut-être quand même été enregistré — vérifiez la feuille si besoin.' });
-                } else {
-                    if (onError) onError(error);
-                }
+                throw err;
             });
     }
 
-    function handleResult(result, type) {
-        if (result && result.success) {
-            afficherSucces(result, type);
-        } else {
-            afficherErreur((result && result.message) ? result.message : 'Erreur inconnue');
-        }
+    function ping(premier) {
+        appeler({ action: premier ? 'warmup' : 'ping', _: Date.now() }, 15000).catch(function () {});
     }
 
-    function afficherSucces(result, type) {
-        var icon = type === 'entrée' ? '✅' : '🚪';
-        var title = type === 'entrée' ? 'Entrée enregistrée' : 'Sortie enregistrée';
-        var color = type === 'entrée' ? '#166534' : '#991b1b';
-        document.getElementById('result').innerHTML =
-            '<div class="result-card"><div class="result-header"><span id="result-icon">' + icon + '</span>' +
-            '<h2 id="result-title" style="color:' + color + ';">' + title + '</h2></div>' +
-            '<div id="result-content">' +
-            '<div class="info-item"><span class="label">Matricule:</span><span class="value">' + (result.matricule || '') + '</span></div>' +
-            '<div class="info-item"><span class="label">Nom:</span><span class="value">' + (result.nom || '') + '</span></div>' +
-            '<div class="info-item"><span class="label">Date:</span><span class="value">' + (result.date || '') + '</span></div>' +
-            '<div class="info-item"><span class="label">Heure:</span><span class="value">' + (result.heure || '') + '</span></div>' +
-            '</div></div>';
-        afficherToast(result.message || title, 'success');
+    // ============================================
+    // Pointage : "✅ Enregistré" s'affiche AU SCAN (sans attendre le serveur).
+    // L'envoi part en arrière-plan, en parallèle ; seule une erreur remplace l'affichage.
+    // ============================================
+    function pointer(matricule, nom) {
+        var libelle = nom || matricule;
+        afficher('in', libelle, '✅ Enregistré');
+
+        appeler({ action: 'pointer', matricule: matricule }, REQUEST_TIMEOUT_MS)
+            .then(function (data) {
+                if (!data || !data.success) {
+                    afficher('error', libelle, (data && data.message) || 'Erreur inconnue');
+                }
+            }, function () {
+                afficher('error', libelle, 'Le serveur ne répond pas. Le pointage a peut-être quand même été enregistré — vérifiez la feuille.');
+            });
+    }
+
+    // ============================================
+    // Affichage : une seule petite carte, rien d'autre
+    // ============================================
+    function afficher(kind, nom, texte) {
+        $('result').innerHTML =
+            '<div class="result-card result-card--' + kind + '">' +
+            '<div class="result-name">' + esc(nom) + '</div>' +
+            '<div class="result-message">' + esc(texte) + '</div></div>';
     }
 
     function afficherErreur(message) {
-        var clean = String(message || 'Erreur');
-        document.getElementById('result').innerHTML =
-            '<div class="result-card result-card--error">' +
-            '<div class="result-header"><span id="result-icon">⚠️</span><h2 id="result-title">Vérification interrompue</h2></div>' +
-            '<div class="result-message">' + clean + '</div></div>';
-        afficherToast(clean, 'error');
+        afficher('error', '', message);
     }
 
-    function afficherToast(message, type) {
-        var toast = document.createElement('div');
-        toast.className = 'toast toast-' + type;
-        toast.textContent = message;
-        document.body.appendChild(toast);
-        setTimeout(function () {
-            if (toast.parentNode) toast.parentNode.removeChild(toast);
-        }, 2600);
-    }
+    // ============================================
+    // Démarrage
+    // ============================================
+    function init() {
+        ping(true);
+        setInterval(function () { if (!document.hidden) ping(false); }, KEEPALIVE_MS);
 
-    window.onload = function () {
-        setMode('entree');
-        document.querySelectorAll('.mode-btn').forEach(function (btn) {
-            btn.addEventListener('click', function () { setMode(btn.getAttribute('data-mode')); });
+        $('btn-switch-camera').addEventListener('click', changerCamera);
+        $('btn-toggle-scan').addEventListener('click', toggleScan);
+
+        $('manual-form').addEventListener('submit', function (evt) {
+            evt.preventDefault();
+            var input = $('manual-matricule');
+            var matricule = input.value.trim();
+            if (!matricule) { afficherErreur('Veuillez saisir un matricule ou scanner un QR valide.'); return; }
+            pointer(matricule, '');
+            input.value = '';
         });
 
-        demarrerSuiviPosition();
+        // Caméra coupée quand la page est masquée, relancée au retour.
+        document.addEventListener('visibilitychange', function () {
+            if (document.hidden) {
+                if (isRunning) {
+                    resumeAfterHidden = true;
+                    arreterScanner();
+                    setStatus('En pause (page masquée)');
+                }
+            } else {
+                if (resumeAfterHidden) { resumeAfterHidden = false; demarrerScanner(); }
+                ping(false);
+            }
+        });
 
-        var switchBtn = document.getElementById('btn-switch-camera');
-        if (switchBtn) switchBtn.addEventListener('click', changerCamera);
+        demarrerScanner();
+    }
 
-        var toggleBtn = document.getElementById('btn-toggle-scan');
-        if (toggleBtn) toggleBtn.addEventListener('click', toggleScan);
+    window.addEventListener('beforeunload', function () {
+        if (html5QrCode && isRunning) { try { html5QrCode.stop(); } catch (e) {} }
+    });
 
-        var manualForm = document.getElementById('manual-form');
-        if (manualForm) {
-            manualForm.addEventListener('submit', function (evt) {
-                evt.preventDefault();
-                var input = document.getElementById('manual-matricule');
-                var matricule = input.value.trim();
-                if (!matricule) return;
-                traiterMatricule(matricule, function () {});
-                input.value = '';
-            });
-        }
-
-        if (document.getElementById('reader')) {
-            demarrerScanner();
-        }
-    };
-
-    window.onbeforeunload = function () {
-        if (html5QrCode) {
-            try { html5QrCode.stop(); } catch (e) {}
-        }
-        if (watchId !== null && navigator.geolocation) {
-            try { navigator.geolocation.clearWatch(watchId); } catch (e) {}
-        }
-    };
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
 })();
