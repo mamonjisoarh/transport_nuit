@@ -1,4 +1,4 @@
-// Frontend Pointage QR — v3.6 (un seul bouton : le scan enregistre)
+// Frontend Pointage QR — v3.8
 // L'URL de l'API est définie ICI uniquement.
 (function () {
     'use strict';
@@ -177,13 +177,23 @@
     // ============================================
     function pointer(matricule, nom) {
         var libelle = nom || matricule;
+        var optionAccompagnement = $('accompagnement');
+        var accompagnement = optionAccompagnement.checked;
+        optionAccompagnement.checked = false;
         afficher('in', libelle, '✅ Enregistré');
 
-        appeler({ action: 'pointer', matricule: matricule }, REQUEST_TIMEOUT_MS)
+        appeler({ action: 'pointer', matricule: matricule, accompagnement: accompagnement }, REQUEST_TIMEOUT_MS)
             .then(function (data) {
                 if (!data || !data.success) {
-                    afficher('error', libelle, (data && data.message) || 'Erreur inconnue');
+                    var message = (data && data.message) || 'Erreur inconnue';
+                    if (data && data.date && data.heure) {
+                        message += '\nDate : ' + data.date + '\nHeure Madagascar : ' + data.heure;
+                    }
+                    afficher('error', libelle, message);
+                    return;
                 }
+                afficher('in', libelle, '✅ Enregistré\nDate : ' + data.date + '\nHeure Madagascar : ' + data.heure +
+                    '\nAccompagnement : ' + (data.accompagnement ? 'Oui' : 'Non'));
             }, function () {
                 afficher('error', libelle, 'Le serveur ne répond pas. Le pointage a peut-être quand même été enregistré — vérifiez la feuille.');
             });
