@@ -53,6 +53,27 @@ body {
     font-size: clamp(1.6rem, 4vw, 2.1rem);
 }
 
+.accompagnement-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding: 12px 14px;
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 12px;
+    color: white;
+    background: rgba(255,255,255,0.1);
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.accompagnement-option input {
+    width: 18px;
+    height: 18px;
+    accent-color: #22c55e;
+}
+
 /* ============================================
    ZONE SCANNER — vidéo pure, sans dashboard de librairie
    ============================================ */
@@ -217,6 +238,7 @@ body {
     padding: 10px;
     font-weight: 600;
     line-height: 1.45;
+    white-space: pre-line;
 }
 
 .result-name {
